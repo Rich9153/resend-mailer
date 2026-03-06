@@ -431,6 +431,10 @@
   let currentRowData = {};
   const sentRows = new Set();
 
+  // Corps par défaut — mis à jour à chaque modification du textarea
+  let defaultBody = '';
+  let defaultBodyMode = 'text';
+
   // ─── Mode HTML/texte ──────────────────────────────────────
   function setMode(m, btn) {
     mode = m;
@@ -543,8 +547,8 @@
     tags.to = [row.email];
     renderTags('to');
 
-    // Remplir corps (depuis Excel si présent, sinon laisser vide)
-    document.getElementById('body').value = row.corps;
+    // Remplir corps : Excel en priorité, sinon le defaultBody mémorisé
+    document.getElementById('body').value = row.corps || defaultBody;
 
     // Remplir sujet si présent
     if (row.sujet) document.getElementById('subject').value = row.sujet;
@@ -742,10 +746,10 @@
 
     if (type === 'standard') {
       // Texte brut — pas de balises HTML
+      const entrepriseLigne = entreprise ? `\nEn tant que représentant(e) de ${entreprise}, nous` : 'Nous';
       const txt =
 `Bonjour ${civility},
-
-Nous avons l'honneur de vous convier au lancement officiel de la Station de Recharge de Véhicules Électriques de GEM e-Mobility et avons le plaisir de vous adresser ci-joint votre invitation personnelle.
+${entrepriseLigne} avons l'honneur de vous convier au lancement officiel de la Station de Recharge de Véhicules Électriques de GEM e-Mobility et avons le plaisir de vous adresser ci-joint votre invitation personnelle.
 
 Cet événement sera l'occasion de découvrir nos installations, d'échanger avec nos équipes et de partager ce moment fort pour la mobilité électrique. Votre présence nous serait particulièrement précieuse.
 
@@ -756,6 +760,8 @@ Dans l'attente du plaisir de vous accueillir, nous vous prions d'agréer, ${civi
 Cordialement,
 L'équipe GEM e-Mobility`;
 
+      defaultBody = txt;
+      defaultBodyMode = 'text';
       document.getElementById('body').value = txt;
       document.getElementById('subject').value = SUJET_EVENEMENT;
       // Passer en mode texte brut
@@ -780,6 +786,8 @@ L'équipe GEM e-Mobility`;
 <br>
 <p><strong>L'équipe GEM e-Mobility</strong></p>`;
 
+      defaultBody = html;
+      defaultBodyMode = 'html';
       document.getElementById('body').value = html;
       document.getElementById('subject').value = SUJET_EVENEMENT;
       // Passer en mode HTML
@@ -787,6 +795,12 @@ L'équipe GEM e-Mobility`;
       setMode('html', htmlTab);
     }
   }
+
+  // Mémoriser chaque modification du corps du message
+  document.getElementById('body').addEventListener('input', function () {
+    defaultBody = this.value;
+    defaultBodyMode = mode;
+  });
 
   function formatSize(b) {
     if (b < 1024) return b + ' B';
