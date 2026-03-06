@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resend Mailer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 700px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 22px 28px;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 34px; height: 34px;
+      background: #5046e5;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px;
+    }
+
+    .card-header h1 { font-size: 17px; font-weight: 600; color: #fff; }
+    .card-header .from-badge {
+      margin-left: auto;
+      font-size: 12px;
+      color: #555;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 20px;
+      padding: 4px 10px;
+    }
+
+    .card-body { padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+
+    .field label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .field input,
+    .field textarea {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #e8e8e8;
+      font-size: 14px;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+      width: 100%;
+    }
+
+    .field input:focus,
+    .field textarea:focus { border-color: #5046e5; }
+
+    .field textarea { resize: vertical; min-height: 160px; line-height: 1.5; }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    /* Tags input (multi-email) */
+    .tags-box {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 7px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      cursor: text;
+      transition: border-color 0.15s;
+      min-height: 42px;
+    }
+    .tags-box:focus-within { border-color: #5046e5; }
+
+    .tag {
+      background: #5046e520;
+      border: 1px solid #5046e540;
+      color: #a5a0f7;
+      border-radius: 5px;
+      padding: 3px 8px;
+      font-size: 13px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .tag .remove {
+      cursor: pointer; color: #777; font-size: 15px; line-height: 1;
+      transition: color 0.1s;
+    }
+    .tag .remove:hover { color: #f87171; }
+
+    .tags-input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #e8e8e8;
+      font-size: 14px;
+      font-family: inherit;
+      flex: 1;
+      min-width: 160px;
+      padding: 2px 2px;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex; gap: 4px;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 4px;
+    }
+    .tab {
+      flex: 1; padding: 6px 10px;
+      border-radius: 5px; font-size: 13px;
+      cursor: pointer; text-align: center;
+      color: #555; transition: all 0.15s;
+      border: none; background: transparent;
+    }
+    .tab.active { background: #5046e5; color: #fff; }
+
+    /* Attachments drop zone */
+    .drop-zone {
+      border: 1.5px dashed #2e2e2e;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: #111;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: #5046e5;
+      background: #5046e510;
+    }
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .drop-zone .drop-icon { font-size: 24px; margin-bottom: 6px; }
+    .drop-zone p { font-size: 13px; color: #555; }
+    .drop-zone span { color: #5046e5; font-weight: 500; }
+
+    .file-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+
+    .file-item {
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 7px;
+      padding: 8px 12px;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px;
+    }
+    .file-icon { font-size: 16px; }
+    .file-name { flex: 1; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-size { color: #555; font-size: 12px; white-space: nowrap; }
+    .file-remove {
+      cursor: pointer; color: #555; font-size: 16px;
+      transition: color 0.1s; line-height: 1;
+    }
+    .file-remove:hover { color: #f87171; }
+
+    /* Token row */
+    .token-row { display: flex; gap: 8px; }
+    .token-row input { flex: 1; }
+    .btn-eye {
+      background: #111; border: 1px solid #2a2a2a; border-radius: 8px;
+      color: #666; cursor: pointer; padding: 0 12px; font-size: 15px;
+      transition: color 0.15s;
+    }
+    .btn-eye:hover { color: #aaa; }
+
+    /* Footer */
+    .card-footer {
+      padding: 18px 28px;
+      border-top: 1px solid #2a2a2a;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    .btn-send {
+      background: #5046e5; color: #fff; border: none;
+      border-radius: 8px; padding: 10px 22px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .btn-send:hover { background: #4338ca; }
+    .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-clear {
+      background: transparent; color: #555;
+      border: 1px solid #2a2a2a; border-radius: 8px;
+      padding: 10px 16px; font-size: 14px; cursor: pointer;
+      transition: color 0.15s;
+    }
+    .btn-clear:hover { color: #888; }
+
+    .status {
+      margin-left: auto; font-size: 13px;
+      display: flex; align-items: center; gap: 6px;
+      opacity: 0; transition: opacity 0.3s;
+      max-width: 260px; text-align: right;
+    }
+    .status.show { opacity: 1; }
+    .status.success { color: #34d399; }
+    .status.error { color: #f87171; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .divider {
+      height: 1px; background: #222; margin: 2px 0;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <div class="logo">✉</div>
+    <h1>Resend Mailer</h1>
+    <div class="from-badge" id="fromLabel">contact@gem-emobility.com</div>
+  </div>
+
+  <div class="card-body">
+
+    <!-- From / Reply-To -->
+    <div class="row">
+      <div class="field">
+        <label>De (From)</label>
+        <input type="email" id="from" value="contact@gem-emobility.com"
+          placeholder="contact@gem-emobility.com"
+          oninput="document.getElementById('fromLabel').textContent = this.value" />
+      </div>
+      <div class="field">
+        <label>Reply-To</label>
+        <input type="email" id="replyTo" placeholder="(optionnel)" />
+      </div>
+    </div>
+
+    <!-- To (multi) -->
+    <div class="field">
+      <label>À (To) — Entrée ou virgule pour ajouter</label>
+      <div class="tags-box" id="toBox" onclick="document.getElementById('toInput').focus()">
+        <input class="tags-input" id="toInput" type="email"
+          placeholder="destinataire@exemple.com"
+          onkeydown="handleTagKey(event,'to')"
+          onblur="commitTag('to')" />
+      </div>
+    </div>
+
+    <!-- CC / BCC -->
+    <div class="row">
+      <div class="field">
+        <label>CC — Entrée pour ajouter</label>
+        <div class="tags-box" id="ccBox" onclick="document.getElementById('ccInput').focus()">
+          <input class="tags-input" id="ccInput" type="email"
+            placeholder="cc@exemple.com"
+            onkeydown="handleTagKey(event,'cc')"
+            onblur="commitTag('cc')" />
+        </div>
+      </div>
+      <div class="field">
+        <label>BCC — Entrée pour ajouter</label>
+        <div class="tags-box" id="bccBox" onclick="document.getElementById('bccInput').focus()">
+          <input class="tags-input" id="bccInput" type="email"
+            placeholder="bcc@exemple.com"
+            onkeydown="handleTagKey(event,'bcc')"
+            onblur="commitTag('bcc')" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Subject -->
+    <div class="field">
+      <label>Objet</label>
+      <input type="text" id="subject" placeholder="Objet de l'email" />
+    </div>
+
+    <!-- Body -->
+    <div class="field">
+      <label>Corps du message</label>
+      <div class="tabs">
+        <button class="tab active" onclick="setMode('html',this)">HTML</button>
+        <button class="tab" onclick="setMode('text',this)">Texte brut</button>
+      </div>
+      <textarea id="body" placeholder="Contenu de l'email..."></textarea>
+    </div>
+
+    <!-- Attachments -->
+    <div class="field">
+      <label>Pièces jointes</label>
+      <div class="drop-zone" id="dropZone"
+        ondragover="event.preventDefault(); this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="handleDrop(event)">
+        <input type="file" id="fileInput" multiple onchange="handleFiles(this.files)" />
+        <div class="drop-icon">📎</div>
+        <p>Glissez vos fichiers ici ou <span>cliquez pour parcourir</span></p>
+      </div>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+  </div>
+
+  <div class="card-footer">
+    <button class="btn-send" id="sendBtn" onclick="sendEmail()">
+      <span id="btnIcon">→</span>
+      <span id="btnText">Envoyer</span>
+    </button>
+    <button class="btn-clear" onclick="clearForm()">Effacer</button>
+    <div class="status" id="status">
+      <div class="dot"></div>
+      <span id="statusText"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  let mode = 'html';
+  const tags = { to: [], cc: [], bcc: [] };
+  const attachments = []; // { name, content (base64), type }
+
+  // ---- Mode HTML / texte ----
+  function setMode(m, btn) {
+    mode = m;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  // ---- Token ----
+  function toggleToken() {
+    const i = document.getElementById('apiToken');
+    i.type = i.type === 'password' ? 'text' : 'password';
+  }
+
+  // ---- Tags (multi-email) ----
+  function handleTagKey(e, field) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      commitTag(field);
+    } else if (e.key === 'Backspace' && e.target.value === '' && tags[field].length) {
+      removeTag(field, tags[field].length - 1);
+    }
+  }
+
+  function commitTag(field) {
+    const input = document.getElementById(field + 'Input');
+    const val = input.value.replace(/,/g, '').trim();
+    if (val && isValidEmail(val) && !tags[field].includes(val)) {
+      tags[field].push(val);
+      renderTags(field);
+    }
+    input.value = '';
+  }
+
+  function removeTag(field, idx) {
+    tags[field].splice(idx, 1);
+    renderTags(field);
+  }
+
+  function renderTags(field) {
+    const box = document.getElementById(field + 'Box');
+    const input = document.getElementById(field + 'Input');
+    box.querySelectorAll('.tag').forEach(t => t.remove());
+    tags[field].forEach((email, i) => {
+      const tag = document.createElement('div');
+      tag.className = 'tag';
+      tag.innerHTML = `<span>${email}</span><span class="remove" onclick="removeTag('${field}',${i})">×</span>`;
+      box.insertBefore(tag, input);
+    });
+  }
+
+  function isValidEmail(e) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  }
+
+  // ---- Fichiers ----
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').classList.remove('drag-over');
+    handleFiles(e.dataTransfer.files);
+  }
+
+  function handleFiles(files) {
+    Array.from(files).forEach(file => {
+      if (attachments.find(a => a.name === file.name)) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        attachments.push({ filename: file.name, content: base64, type: file.type, size: file.size });
+        renderFiles();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function removeFile(name) {
+    const idx = attachments.findIndex(a => a.filename === name);
+    if (idx !== -1) attachments.splice(idx, 1);
+    renderFiles();
+  }
+
+  function renderFiles() {
+    const list = document.getElementById('fileList');
+    list.innerHTML = '';
+    attachments.forEach(f => {
+      const el = document.createElement('div');
+      el.className = 'file-item';
+      el.innerHTML = `
+        <span class="file-icon">${fileIcon(f.filename)}</span>
+        <span class="file-name">${f.filename}</span>
+        <span class="file-size">${formatSize(f.size)}</span>
+        <span class="file-remove" onclick="removeFile('${f.filename}')">×</span>`;
+      list.appendChild(el);
+    });
+  }
+
+  function fileIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    if (['pdf'].includes(ext)) return '📄';
+    if (['jpg','jpeg','png','gif','webp','svg'].includes(ext)) return '🖼';
+    if (['doc','docx'].includes(ext)) return '📝';
+    if (['xls','xlsx','csv'].includes(ext)) return '📊';
+    if (['zip','rar','7z'].includes(ext)) return '🗜';
+    return '📎';
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+
+  // ---- Envoi ----
+  async function sendEmail() {
+    // Valider champs obligatoires
+    commitTag('to'); commitTag('cc'); commitTag('bcc');
+
+    const from    = document.getElementById('from').value.trim();
+    const replyTo = document.getElementById('replyTo').value.trim();
+    const subject = document.getElementById('subject').value.trim();
+    const body    = document.getElementById('body').value.trim();
+
+    if (!from || !tags.to.length || !subject || !body) {
+      showStatus('Token, From, To, Objet et Corps sont requis.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('sendBtn');
+    btn.disabled = true;
+    document.getElementById('btnIcon').innerHTML = '<div class="spinner"></div>';
+    document.getElementById('btnText').textContent = 'Envoi...';
+    hideStatus();
+
+    const payload = { from, to: tags.to, subject };
+    if (tags.cc.length)  payload.cc  = tags.cc;
+    if (tags.bcc.length) payload.bcc = tags.bcc;
+    if (replyTo)         payload.reply_to = replyTo;
+    if (mode === 'html') payload.html = body;
+    else                 payload.text = body;
+
+    if (attachments.length) {
+      payload.attachments = attachments.map(a => ({
+        filename: a.filename,
+        content:  a.content
+      }));
+    }
+
+    try {
+      const res = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok) showStatus('Envoyé ! ID : ' + data.id, 'success');
+      else        showStatus(data.message || 'Erreur envoi.', 'error');
+    } catch {
+      showStatus('Erreur réseau.', 'error');
+    } finally {
+      btn.disabled = false;
+      document.getElementById('btnIcon').textContent = '→';
+      document.getElementById('btnText').textContent = 'Envoyer';
+    }
+  }
+
+  function showStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.className = `status show ${type}`;
+    document.getElementById('statusText').textContent = msg;
+  }
+
+  function hideStatus() {
+    document.getElementById('status').className = 'status';
+  }
+
+  function clearForm() {
+    ['to','cc','bcc'].forEach(f => { tags[f] = []; renderTags(f); });
+    attachments.length = 0;
+    renderFiles();
+    document.getElementById('subject').value = '';
+    document.getElementById('body').value = '';
+    document.getElementById('replyTo').value = '';
+    document.getElementById('fileInput').value = '';
+    hideStatus();
+  }
+</script>
+</body>
+</html>
