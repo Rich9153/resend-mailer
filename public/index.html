@@ -738,28 +738,37 @@
     const fullName  = [prenom, nom].filter(Boolean).join(' ') || 'Madame/Monsieur';
     const civility  = prenom || nom ? `${fullName}` : 'Madame, Monsieur';
 
-    let html = '';
+    const SUJET_EVENEMENT = 'Invitation — Lancement de la Station de Recharge de Véhicules Électriques GEM e-Mobility';
 
     if (type === 'standard') {
-      html = `<p>Bonjour <strong>${civility}</strong>,</p>
-<br>
-<p>Nous avons l'honneur de vous convier à notre prochain événement et avons le plaisir de vous adresser ci-joint votre <strong>invitation personnelle</strong>.</p>
-<br>
-<p>Cette occasion sera l'opportunité de découvrir nos dernières initiatives et d'échanger avec des acteurs clés du secteur. Votre présence nous serait particulièrement précieuse.</p>
-<br>
-<p>Vous trouverez en pièce jointe toutes les informations nécessaires : programme, lieu et modalités d'accès.</p>
-<br>
-<p>Dans l'attente du plaisir de vous accueillir, nous vous prions d'agréer, <strong>${civility}</strong>, l'expression de nos salutations distinguées.</p>
-<br>
-<p>Cordialement,<br><strong>L'équipe GEM e-Mobility</strong></p>`;
+      // Texte brut — pas de balises HTML
+      const txt =
+`Bonjour ${civility},
+
+Nous avons l'honneur de vous convier au lancement officiel de la Station de Recharge de Véhicules Électriques de GEM e-Mobility et avons le plaisir de vous adresser ci-joint votre invitation personnelle.
+
+Cet événement sera l'occasion de découvrir nos installations, d'échanger avec nos équipes et de partager ce moment fort pour la mobilité électrique. Votre présence nous serait particulièrement précieuse.
+
+Vous trouverez en pièce jointe toutes les informations nécessaires : programme, lieu et modalités d'accès.
+
+Dans l'attente du plaisir de vous accueillir, nous vous prions d'agréer, ${civility}, l'expression de nos salutations distinguées.
+
+Cordialement,
+L'équipe GEM e-Mobility`;
+
+      document.getElementById('body').value = txt;
+      document.getElementById('subject').value = SUJET_EVENEMENT;
+      // Passer en mode texte brut
+      const textTab = document.querySelectorAll('.tab')[1];
+      setMode('text', textTab);
 
     } else {
       const entreprisePart = entreprise
         ? `En tant que représentant(e) de <strong>${entreprise}</strong>, nous`
         : 'Nous';
-      html = `<p>Bonjour <strong>${civility}</strong>,</p>
+      const html = `<p>Bonjour <strong>${civility}</strong>,</p>
 <br>
-<p>${entreprisePart} avons le plaisir de vous adresser personnellement cette <strong>invitation exclusive</strong> pour notre prochain événement.</p>
+<p>${entreprisePart} avons le plaisir de vous adresser personnellement cette <strong>invitation exclusive</strong> pour le lancement officiel de la <strong>Station de Recharge de Véhicules Électriques GEM e-Mobility</strong>.</p>
 <br>
 <p>Votre profil${entreprise ? ` et l'engagement de <strong>${entreprise}</strong>` : ''} font de vous un invité de choix. Nous espérons vivement pouvoir vous accueillir et échanger avec vous lors de cette occasion unique.</p>
 <br>
@@ -770,12 +779,13 @@
 <p>Dans l'attente de vous rencontrer, veuillez agréer, <strong>${civility}</strong>, nos cordiales salutations.</p>
 <br>
 <p><strong>L'équipe GEM e-Mobility</strong></p>`;
-    }
 
-    document.getElementById('body').value = html;
-    // Passer automatiquement en mode HTML
-    const htmlTab = document.querySelector('.tab');
-    setMode('html', htmlTab);
+      document.getElementById('body').value = html;
+      document.getElementById('subject').value = SUJET_EVENEMENT;
+      // Passer en mode HTML
+      const htmlTab = document.querySelectorAll('.tab')[0];
+      setMode('html', htmlTab);
+    }
   }
 
   function formatSize(b) {
