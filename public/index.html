@@ -244,6 +244,19 @@
 
     .empty-hint { font-size: 12px; color: #383838; text-align: center; padding: 12px 0; }
 
+    /* ── Template buttons ── */
+    .tpl-btns { display: flex; gap: 8px; }
+    .btn-tpl {
+      flex: 1; padding: 8px 10px; border-radius: 7px; font-size: 12px; font-weight: 500;
+      cursor: pointer; border: 1px solid #252525; background: #0f0f0f;
+      color: #888; transition: all 0.15s; text-align: center;
+    }
+    .btn-tpl:hover { background: #1a1a1a; color: #ccc; border-color: #333; }
+    .btn-tpl.standard { border-color: #5046e550; color: #a5a0f7; background: #5046e510; }
+    .btn-tpl.standard:hover { background: #5046e520; }
+    .btn-tpl.specifique { border-color: #34d39950; color: #34d399; background: #34d39910; }
+    .btn-tpl.specifique:hover { background: #34d39920; }
+
     .info-box {
       background: #0f0f0f; border: 1px solid #1e1e1e; border-radius: 7px;
       padding: 8px 10px; font-size: 11px; color: #555; line-height: 1.5;
@@ -342,6 +355,10 @@
 
       <div class="field">
         <label>Corps du message</label>
+        <div class="tpl-btns">
+          <button class="btn-tpl standard" onclick="applyTemplate('standard')">📧 Email standard</button>
+          <button class="btn-tpl specifique" onclick="applyTemplate('specifique')">✨ Email spécifique</button>
+        </div>
         <div class="tabs">
           <button class="tab active" onclick="setMode('html',this)">HTML</button>
           <button class="tab" onclick="setMode('text',this)">Texte brut</button>
@@ -409,8 +426,9 @@
   const pdfFiles = [];      // { name, file (File object), size }
   const selectedPdfs = new Set(); // noms des PDFs sélectionnés
 
-  let excelRows = [];       // tableau d'objets {email, corps, sujet}
+  let excelRows = [];       // tableau d'objets {email, corps, sujet, nom, prenom, entreprise}
   let currentRow = -1;
+  let currentRowData = {};
   const sentRows = new Set();
 
   // ─── Mode HTML/texte ──────────────────────────────────────
@@ -467,16 +485,22 @@
       if (raw.length < 2) { alert('Le fichier semble vide ou sans données.'); return; }
 
       const headers = raw[0].map(h => String(h).toLowerCase());
-      const emailIdx   = findCol(headers, ['email','mail','to','destinataire','à','a']);
-      const bodyIdx    = findCol(headers, ['corps','body','message','contenu','texte']);
-      const subjectIdx = findCol(headers, ['sujet','subject','objet']);
+      const emailIdx      = findCol(headers, ['email','mail','to','destinataire','à','a']);
+      const bodyIdx       = findCol(headers, ['corps','body','message','contenu','texte']);
+      const subjectIdx    = findCol(headers, ['sujet','subject','objet']);
+      const nomIdx        = findCol(headers, ['nom','name','lastname','last_name','surname']);
+      const prenomIdx     = findCol(headers, ['prenom','prénom','firstname','first_name','given']);
+      const entrepriseIdx = findCol(headers, ['entreprise','company','société','societe','organisation','org']);
 
       if (emailIdx === -1) { alert('Colonne "email" introuvable dans le fichier.'); return; }
 
       excelRows = raw.slice(1).filter(r => r[emailIdx]).map(r => ({
-        email:   String(r[emailIdx] || '').trim(),
-        corps:   String(r[bodyIdx]    !== undefined ? r[bodyIdx]    : '').trim(),
-        sujet:   String(r[subjectIdx] !== undefined ? r[subjectIdx] : '').trim(),
+        email:      String(r[emailIdx]      ?? '').trim(),
+        corps:      String(r[bodyIdx]       ?? '').trim(),
+        sujet:      String(r[subjectIdx]    ?? '').trim(),
+        nom:        String(r[nomIdx]        ?? '').trim(),
+        prenom:     String(r[prenomIdx]     ?? '').trim(),
+        entreprise: String(r[entrepriseIdx] ?? '').trim(),
       }));
 
       sentRows.clear();
@@ -513,12 +537,13 @@
     if (idx < 0 || idx >= excelRows.length) return;
     currentRow = idx;
     const row = excelRows[idx];
+    currentRowData = { ...row };
 
     // Remplir To
     tags.to = [row.email];
     renderTags('to');
 
-    // Remplir corps
+    // Remplir corps (depuis Excel si présent, sinon laisser vide)
     document.getElementById('body').value = row.corps;
 
     // Remplir sujet si présent
@@ -703,6 +728,54 @@
     document.getElementById('replyTo').value = '';
     document.getElementById('attachInput').value = '';
     hideStatus();
+  }
+
+  // ─── Templates ────────────────────────────────────────────
+  function applyTemplate(type) {
+    const nom       = currentRowData.nom       || '';
+    const prenom    = currentRowData.prenom    || '';
+    const entreprise= currentRowData.entreprise|| '';
+    const fullName  = [prenom, nom].filter(Boolean).join(' ') || 'Madame/Monsieur';
+    const civility  = prenom || nom ? `${fullName}` : 'Madame, Monsieur';
+
+    let html = '';
+
+    if (type === 'standard') {
+      html = `<p>Bonjour <strong>${civility}</strong>,</p>
+<br>
+<p>Nous avons l'honneur de vous convier à notre prochain événement et avons le plaisir de vous adresser ci-joint votre <strong>invitation personnelle</strong>.</p>
+<br>
+<p>Cette occasion sera l'opportunité de découvrir nos dernières initiatives et d'échanger avec des acteurs clés du secteur. Votre présence nous serait particulièrement précieuse.</p>
+<br>
+<p>Vous trouverez en pièce jointe toutes les informations nécessaires : programme, lieu et modalités d'accès.</p>
+<br>
+<p>Dans l'attente du plaisir de vous accueillir, nous vous prions d'agréer, <strong>${civility}</strong>, l'expression de nos salutations distinguées.</p>
+<br>
+<p>Cordialement,<br><strong>L'équipe GEM e-Mobility</strong></p>`;
+
+    } else {
+      const entreprisePart = entreprise
+        ? `En tant que représentant(e) de <strong>${entreprise}</strong>, nous`
+        : 'Nous';
+      html = `<p>Bonjour <strong>${civility}</strong>,</p>
+<br>
+<p>${entreprisePart} avons le plaisir de vous adresser personnellement cette <strong>invitation exclusive</strong> pour notre prochain événement.</p>
+<br>
+<p>Votre profil${entreprise ? ` et l'engagement de <strong>${entreprise}</strong>` : ''} font de vous un invité de choix. Nous espérons vivement pouvoir vous accueillir et échanger avec vous lors de cette occasion unique.</p>
+<br>
+<p>Vous trouverez en pièce jointe votre <strong>invitation personnalisée</strong>, incluant le programme détaillé ainsi que les informations pratiques.</p>
+<br>
+<p>Nous restons disponibles pour tout renseignement complémentaire et vous invitons à nous confirmer votre présence.</p>
+<br>
+<p>Dans l'attente de vous rencontrer, veuillez agréer, <strong>${civility}</strong>, nos cordiales salutations.</p>
+<br>
+<p><strong>L'équipe GEM e-Mobility</strong></p>`;
+    }
+
+    document.getElementById('body').value = html;
+    // Passer automatiquement en mode HTML
+    const htmlTab = document.querySelector('.tab');
+    setMode('html', htmlTab);
   }
 
   function formatSize(b) {
