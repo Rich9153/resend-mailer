@@ -431,8 +431,9 @@
   let currentRowData = {};
   const sentRows = new Set();
 
-  // Corps par défaut — mis à jour à chaque modification du textarea
-  let defaultBody = '';
+  // Valeurs par défaut — mémorisées à chaque modification
+  let defaultBody    = '';
+  let defaultSubject = '';
   let defaultBodyMode = 'text';
 
   // ─── Mode HTML/texte ──────────────────────────────────────
@@ -651,11 +652,9 @@
     tags.to = [row.email];
     renderTags('to');
 
-    // Remplir corps : Excel en priorité, sinon le defaultBody mémorisé
-    document.getElementById('body').value = row.corps || defaultBody;
-
-    // Remplir sujet si présent
-    if (row.sujet) document.getElementById('subject').value = row.sujet;
+    // Remplir objet et corps depuis Excel en priorité, sinon les défauts mémorisés
+    document.getElementById('subject').value = row.sujet || defaultSubject;
+    document.getElementById('body').value    = row.corps || defaultBody;
 
     // Vider les pièces jointes (sauf PDFs sélectionnés)
     attachments.length = 0;
@@ -865,6 +864,7 @@ Cordialement,
 L'équipe GEM e-Mobility`;
 
       defaultBody = txt;
+      defaultSubject = SUJET_EVENEMENT;
       defaultBodyMode = 'text';
       document.getElementById('body').value = txt;
       document.getElementById('subject').value = SUJET_EVENEMENT;
@@ -891,6 +891,7 @@ L'équipe GEM e-Mobility`;
 <p><strong>L'équipe GEM e-Mobility</strong></p>`;
 
       defaultBody = html;
+      defaultSubject = SUJET_EVENEMENT;
       defaultBodyMode = 'html';
       document.getElementById('body').value = html;
       document.getElementById('subject').value = SUJET_EVENEMENT;
@@ -900,10 +901,13 @@ L'équipe GEM e-Mobility`;
     }
   }
 
-  // Mémoriser chaque modification du corps du message
+  // Mémoriser chaque modification du corps et de l'objet
   document.getElementById('body').addEventListener('input', function () {
     defaultBody = this.value;
     defaultBodyMode = mode;
+  });
+  document.getElementById('subject').addEventListener('input', function () {
+    defaultSubject = this.value;
   });
 
   function formatSize(b) {
