@@ -244,6 +244,33 @@
 
     .empty-hint { font-size: 12px; color: #383838; text-align: center; padding: 12px 0; }
 
+    /* ── Search box ── */
+    .search-box {
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .search-box input {
+      background: #0f0f0f;
+      border: 1px solid #1e1e1e;
+      border-radius: 7px;
+      color: #e0e0e0;
+      font-size: 12px;
+      padding: 7px 10px 7px 30px;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-box input:focus { border-color: #5046e5; }
+    .search-box::before {
+      content: "🔍";
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      opacity: 0.4;
+    }
+
     /* ── Template buttons ── */
     .tpl-btns { display: flex; gap: 8px; }
     .btn-tpl {
@@ -394,19 +421,23 @@
     </div>
   </div>
 
-  <!-- ═══════════ COLONNE DROITE : PDFs ═══════════ -->
+  <!-- ═══════════ COLONNE DROITE : DOCUMENTS (PDF/DOCX) ═══════════ -->
   <div class="panel">
-    <div class="panel-header">📄 Dossier PDF</div>
+    <div class="panel-header">📄 Dossier Documents</div>
     <div class="panel-body">
 
       <div class="drop-zone">
-        <input type="file" id="pdfFolder" webkitdirectory multiple onchange="loadPdfFolder(this.files)" />
+        <input type="file" id="pdfFolder" webkitdirectory multiple onchange="loadDocumentFolder(this.files)" />
         <div class="dz-icon">📁</div>
         <p>Cliquez pour <span>sélectionner un dossier</span></p>
       </div>
 
       <div class="info-box">
-        Cliquez sur un PDF pour l'ajouter en pièce jointe au formulaire.
+        Cliquez sur un document (<b>.pdf</b> ou <b>.docx</b>) pour l'ajouter en pièce jointe au formulaire.
+      </div>
+
+      <div class="search-box">
+        <input type="text" id="docSearch" placeholder="Rechercher un document..." oninput="renderDocumentList()" />
       </div>
 
       <div class="pdf-list" id="pdfList">
@@ -423,8 +454,8 @@
   let mode = 'html';
   const tags = { to: [], cc: [], bcc: [] };
   const attachments = [];   // { filename, content (base64), size }
-  const pdfFiles = [];      // { name, file (File object), size }
-  const selectedPdfs = new Set(); // noms des PDFs sélectionnés
+  const docFiles = [];      // { name, file (File object), size }
+  const selectedDocs = new Set(); // noms des documents sélectionnés
 
   let excelRows = [];       // tableau d'objets {email, corps, sujet, nom, prenom, entreprise}
   let currentRow = -1;
@@ -502,19 +533,32 @@
       const wb = XLSX.read(e.target.result, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      if (raw.length < 2) { alert('Le fichier semble vide ou sans données.'); return; }
+      if (raw.length < 1) { alert('Le fichier semble vide ou sans données.'); return; }
 
       // ── 1. Trouver la ligne d'entête réelle (celle qui contient "Email") ──
       let headerRowIdx = -1;
-      let nomColIdx = -1, contactColIdx = -1, entrepriseColIdx = -1;
+      let nomColIdx = -1, contactColIdx = -1, entrepriseColIdx = -1, emailColIdx = -1;
 
-      for (let i = 0; i < Math.min(raw.length, 20); i++) {
+      for (let i = 0; i < Math.min(raw.length, 50); i++) {
         const cells = raw[i].map(c => String(c || '').toLowerCase().trim());
-        if (cells.some(c => c === 'email' || c === 'e-mail')) {
+        const foundEmailHeader = cells.some(c => 
+          c === 'email' || c === 'e-mail' || c === 'e mail' || c === 'courriel' || 
+          c === 'mail' || c === 'destinataire' || c.includes('@')
+        );
+        
+        if (foundEmailHeader) {
           headerRowIdx = i;
-          nomColIdx        = cells.findIndex(c => c === 'nom' || c === 'name');
-          contactColIdx    = cells.findIndex(c => c.includes('contact') || c.includes('prenom') || c.includes('prénom'));
-          entrepriseColIdx = cells.findIndex(c => c.includes('entreprise') || c.includes('company') || c.includes('société'));
+          // Mapping spécifique basé sur vos colonnes
+          emailColIdx      = cells.findIndex(c => c === 'email' || c === 'mail' || c === 'courriel');
+          entrepriseColIdx = cells.findIndex(c => c === 'nom' || c.includes('entreprise') || c.includes('société'));
+          contactColIdx    = cells.findIndex(c => c === 'personne de contact' || c.includes('contact') || c.includes('prenom'));
+          nomColIdx        = cells.findIndex(c => c === 'nom de famille' || c === 'lastname');
+          
+          console.log('--- Colonnes détectées ---');
+          console.log('Ligne en-tête index:', headerRowIdx);
+          console.log('Index Email:', emailColIdx);
+          console.log('Index Entreprise (Nom):', entrepriseColIdx);
+          console.log('Index Personne de contact:', contactColIdx);
           break;
         }
       }
@@ -523,76 +567,63 @@
       excelRows = [];
 
       // ── 2. Parcourir toutes les lignes après l'entête ──
-      raw.slice(startRow).forEach(row => {
+      raw.slice(startRow).forEach((row, rowIdx) => {
         const cells = row.map(c => String(c || '').trim());
         const rowText = cells.join(' ');
 
         // Ignorer lignes vides
         if (cells.every(c => !c)) return;
 
-        // Ignorer lignes de section / métadonnées
+        // Ignorer lignes de section / métadonnées (heuristique)
         const firstCell = cells[0] || cells[1] || '';
-        if (SKIP_PATTERNS.some(p => p.test(firstCell) || p.test(rowText.slice(0, 80)))) return;
+        if (SKIP_PATTERNS.some(p => p.test(firstCell) || p.test(rowText.slice(0, 100)))) return;
 
-        // ── Extraire tous les emails de la ligne (peu importe la colonne) ──
-        const emails = [...new Set(rowText.match(EMAIL_RE) || [])].filter(e => e.length > 5);
-        if (!emails.length) return;
+        // ── Extraire tous les emails de la ligne ──
+        let rowEmails = [];
+        
+        // Si on a identifié une colonne email, on l'utilise en priorité
+        if (emailColIdx !== -1 && cells[emailColIdx] && isValidEmail(cells[emailColIdx])) {
+          rowEmails = [cells[emailColIdx]];
+        } else {
+          // Sinon on cherche tous les emails présents sur la ligne
+          rowEmails = [...new Set(rowText.match(EMAIL_RE) || [])].filter(e => e.length > 5);
+        }
+        
+        if (!rowEmails.length) return;
 
         // ── Extraire nom / prénom / entreprise ──
         let nom = '', prenom = '', entreprise = '';
 
-        // Cellules sans email ni chiffres
+        if (nomColIdx !== -1 && cells[nomColIdx]) nom = cells[nomColIdx];
+        if (contactColIdx !== -1 && cells[contactColIdx]) prenom = cells[contactColIdx];
+        if (entrepriseColIdx !== -1 && cells[entrepriseColIdx]) entreprise = cells[entrepriseColIdx];
+
+        // Fallback intelligent si colonnes non trouvées ou vides
         const nonEmailCells = cells.filter(c => c && !EMAIL_RE.test(c) && !/^\d{5,}$/.test(c) && c.length > 1);
-        // reset regex lastIndex
-        EMAIL_RE.lastIndex = 0;
-
-        if (nomColIdx !== -1 && cells[nomColIdx]) {
-          const val = cells[nomColIdx];
-          if (isCompanyName(val)) {
-            entreprise = val;
-          } else {
-            const parts = val.split(/\s+/);
-            if (parts.length >= 2) { prenom = parts[0]; nom = parts.slice(1).join(' '); }
-            else { entreprise = val; }
-          }
-        }
-
-        if (contactColIdx !== -1 && cells[contactColIdx]) {
-          const val = cells[contactColIdx];
-          // Ignorer titres courts (ADG, RL, DG…)
-          if (!/^(ADG|RL|DG|CEO|PDG|DAF|DGA|MD|DIR|Dr|Hon|Prof)/i.test(val) && val.includes(' ') && !prenom) {
+        
+        if (!nom && !prenom && !entreprise && nonEmailCells.length > 0) {
+          // On suppose que la première cellule non-email longue est l'entreprise ou le nom
+          const val = nonEmailCells[0];
+          if (isCompanyName(val)) { entreprise = val; }
+          else if (val.includes(' ')) {
             const parts = val.split(/\s+/);
             prenom = parts[0]; nom = parts.slice(1).join(' ');
-          }
+          } else { entreprise = val; }
         }
 
-        if (entrepriseColIdx !== -1 && cells[entrepriseColIdx] && !entreprise) {
-          entreprise = cells[entrepriseColIdx];
-        }
-
-        // Fallback : extraire depuis les premières cellules non-email
-        if (!nom && !entreprise && nonEmailCells.length > 0) {
-          const val = nonEmailCells[0];
-          if (isCompanyName(val)) {
-            entreprise = val;
-          } else {
-            const parts = val.split(/\s+/);
-            if (parts.length >= 2) { prenom = parts[0]; nom = parts.slice(1).join(' '); }
-            else { entreprise = val; }
-          }
-          if (!entreprise && nonEmailCells.length > 1) {
-            entreprise = nonEmailCells[1];
-          }
-        }
-
-        // ── Créer une entrée par email ──
-        emails.forEach(email => {
+        // ── Créer une entrée par email unique pour cette ligne ──
+        rowEmails.forEach(email => {
+          const emailTrimmed = email.toLowerCase().trim();
+          // Éviter les doublons exacts sur une même ligne
+          if (excelRows.some(r => r.email === emailTrimmed && r.rowIdx === rowIdx)) return;
+          
           excelRows.push({
-            email:      email.toLowerCase().trim(),
+            email:      emailTrimmed,
             nom:        nom.trim(),
             prenom:     prenom.trim(),
             entreprise: entreprise.trim(),
-            corps: '', sujet: ''
+            corps: '', sujet: '',
+            rowIdx: rowIdx // utile pour éviter doublons sur la même ligne
           });
         });
       });
@@ -604,7 +635,6 @@
       renderRowList();
       loadRow(0);
 
-      // Mettre à jour la zone de dépôt
       document.getElementById('excelDrop').querySelector('p').innerHTML =
         `✓ <strong>${file.name}</strong> — <strong>${excelRows.length}</strong> destinataires extraits`;
     };
@@ -618,14 +648,6 @@
     if (val.length > 3 && val === upper) return true; // Tout en majuscules
     if (/\b(SA|SARL|SAS|SPRL|Ltd|Inc|Corp|Group|Bank|Banque|Ministère|Ministry|Agency|Authority|Hotel|Club|Hospital)\b/i.test(val)) return true;
     return false;
-  }
-
-  function findCol(headers, keywords) {
-    for (const kw of keywords) {
-      const idx = headers.findIndex(h => h.includes(kw));
-      if (idx !== -1) return idx;
-    }
-    return -1;
   }
 
   function renderRowList() {
@@ -656,10 +678,10 @@
     document.getElementById('subject').value = row.sujet || defaultSubject;
     document.getElementById('body').value    = row.corps || defaultBody;
 
-    // Vider les pièces jointes (sauf PDFs sélectionnés)
+    // Vider les pièces jointes (sauf docs sélectionnés)
     attachments.length = 0;
-    selectedPdfs.clear();
-    renderPdfList();
+    selectedDocs.clear();
+    renderDocumentList();
     renderAttachList();
     hideStatus();
     renderRowList();
@@ -682,50 +704,64 @@
       excelRows.length ? `${sentRows.size} / ${excelRows.length} envoyés` : '—';
   }
 
-  // ─── PDFs ─────────────────────────────────────────────────
-  function loadPdfFolder(files) {
-    pdfFiles.length = 0;
-    Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf')).forEach(f => {
-      pdfFiles.push({ name: f.name, file: f, size: f.size });
+  // ─── Documents (PDF/DOCX) ─────────────────────────────────
+  function loadDocumentFolder(files) {
+    docFiles.length = 0;
+    const allowedExtensions = ['.pdf', '.docx'];
+    Array.from(files).filter(f => {
+      const name = f.name.toLowerCase();
+      return allowedExtensions.some(ext => name.endsWith(ext));
+    }).forEach(f => {
+      docFiles.push({ name: f.name, file: f, size: f.size });
     });
-    pdfFiles.sort((a, b) => a.name.localeCompare(b.name));
-    renderPdfList();
+    docFiles.sort((a, b) => a.name.localeCompare(b.name));
+    renderDocumentList();
   }
 
-  function renderPdfList() {
+  function renderDocumentList() {
     const list = document.getElementById('pdfList');
-    if (!pdfFiles.length) { list.innerHTML = '<div class="empty-hint">Aucun PDF</div>'; return; }
-    list.innerHTML = pdfFiles.map(f => `
-      <div class="pdf-item ${selectedPdfs.has(f.name) ? 'selected' : ''}"
-           onclick="togglePdf('${f.name}')">
-        <span>📄</span>
-        <span class="pdf-name">${f.name}</span>
-        <span class="pdf-size">${formatSize(f.size)}</span>
-      </div>`).join('');
+    const query = document.getElementById('docSearch').value.toLowerCase().trim();
+    
+    if (!docFiles.length) { list.innerHTML = '<div class="empty-hint">Aucun document</div>'; return; }
+    
+    const filtered = docFiles.filter(f => f.name.toLowerCase().includes(query));
+    
+    if (!filtered.length) { list.innerHTML = '<div class="empty-hint">Aucun résultat pour "' + query + '"</div>'; return; }
+
+    list.innerHTML = filtered.map(f => {
+      const icon = f.name.toLowerCase().endsWith('.pdf') ? '📄' : '📝';
+      return `
+        <div class="pdf-item ${selectedDocs.has(f.name) ? 'selected' : ''}"
+             onclick="toggleDocument('${f.name}')">
+          <span>${icon}</span>
+          <span class="pdf-name">${f.name}</span>
+          <span class="pdf-size">${formatSize(f.size)}</span>
+        </div>`;
+    }).join('');
   }
 
-  function togglePdf(name) {
-    const pdfObj = pdfFiles.find(f => f.name === name);
-    if (!pdfObj) return;
+  function toggleDocument(name) {
+    const docObj = docFiles.find(f => f.name === name);
+    if (!docObj) return;
 
-    if (selectedPdfs.has(name)) {
+    if (selectedDocs.has(name)) {
       // Désélectionner → retirer des pièces jointes
-      selectedPdfs.delete(name);
+      selectedDocs.delete(name);
       const idx = attachments.findIndex(a => a.filename === name);
       if (idx !== -1) attachments.splice(idx, 1);
-      renderPdfList();
+      renderDocumentList();
       renderAttachList();
     } else {
       // Sélectionner → lire et ajouter
       const reader = new FileReader();
       reader.onload = e => {
         const base64 = e.target.result.split(',')[1];
-        attachments.push({ filename: name, content: base64, size: pdfObj.size });
-        selectedPdfs.add(name);
-        renderPdfList();
+        attachments.push({ filename: name, content: base64, size: docObj.size });
+        selectedDocs.add(name);
+        renderDocumentList();
         renderAttachList();
       };
-      reader.readAsDataURL(pdfObj.file);
+      reader.readAsDataURL(docObj.file);
     }
   }
 
