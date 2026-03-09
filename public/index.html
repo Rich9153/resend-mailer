@@ -289,8 +289,8 @@
       </div>
 
       <div class="info-box">
-        Colonnes attendues :<br>
-        <b>email</b> · <b>corps</b> (ou body) · <b>sujet</b> (optionnel)
+        Détection automatique des emails (toutes colonnes).<br>
+        Colonnes optionnelles : <b>NOM</b> · <b>PERSONNE DE CONTACT</b> · <b>ENTREPRISE</b>
       </div>
 
       <div class="row-list" id="rowList">
@@ -479,40 +479,144 @@
     if (file) loadExcel(file);
   }
 
+  const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+
+  // Lignes à ignorer (entêtes de section, métadonnées, descriptions)
+  const SKIP_PATTERNS = [
+    /^[A-I]$/,                        // lettre seule = catégorie (A, B, C…)
+    /^Colonne\d/i,                     // Colonne1, Colonne2…
+    /^voir notre/i,                    // "voir notre équipe"
+    /Faire une différence/i,           // description longue
+    /^Monnaie de/i,                    // métadonnée
+    /^INCOTERMS/i,                     // métadonnée
+    /^Proposition de liste/i,          // titre du fichier
+    /Partenaire\s*:/i,                 // sous-titre de section
+    /^\d+$/,                           // numéro seul
+  ];
+
   function loadExcel(file) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = e => {
       const wb = XLSX.read(e.target.result, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
       if (raw.length < 2) { alert('Le fichier semble vide ou sans données.'); return; }
 
-      const headers = raw[0].map(h => String(h).toLowerCase());
-      const emailIdx      = findCol(headers, ['email','mail','to','destinataire','à','a']);
-      const bodyIdx       = findCol(headers, ['corps','body','message','contenu','texte']);
-      const subjectIdx    = findCol(headers, ['sujet','subject','objet']);
-      const nomIdx        = findCol(headers, ['nom','name','lastname','last_name','surname']);
-      const prenomIdx     = findCol(headers, ['prenom','prénom','firstname','first_name','given']);
-      const entrepriseIdx = findCol(headers, ['entreprise','company','société','societe','organisation','org']);
+      // ── 1. Trouver la ligne d'entête réelle (celle qui contient "Email") ──
+      let headerRowIdx = -1;
+      let nomColIdx = -1, contactColIdx = -1, entrepriseColIdx = -1;
 
-      if (emailIdx === -1) { alert('Colonne "email" introuvable dans le fichier.'); return; }
+      for (let i = 0; i < Math.min(raw.length, 20); i++) {
+        const cells = raw[i].map(c => String(c || '').toLowerCase().trim());
+        if (cells.some(c => c === 'email' || c === 'e-mail')) {
+          headerRowIdx = i;
+          nomColIdx        = cells.findIndex(c => c === 'nom' || c === 'name');
+          contactColIdx    = cells.findIndex(c => c.includes('contact') || c.includes('prenom') || c.includes('prénom'));
+          entrepriseColIdx = cells.findIndex(c => c.includes('entreprise') || c.includes('company') || c.includes('société'));
+          break;
+        }
+      }
 
-      excelRows = raw.slice(1).filter(r => r[emailIdx]).map(r => ({
-        email:      String(r[emailIdx]      ?? '').trim(),
-        corps:      String(r[bodyIdx]       ?? '').trim(),
-        sujet:      String(r[subjectIdx]    ?? '').trim(),
-        nom:        String(r[nomIdx]        ?? '').trim(),
-        prenom:     String(r[prenomIdx]     ?? '').trim(),
-        entreprise: String(r[entrepriseIdx] ?? '').trim(),
-      }));
+      const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
+      excelRows = [];
+
+      // ── 2. Parcourir toutes les lignes après l'entête ──
+      raw.slice(startRow).forEach(row => {
+        const cells = row.map(c => String(c || '').trim());
+        const rowText = cells.join(' ');
+
+        // Ignorer lignes vides
+        if (cells.every(c => !c)) return;
+
+        // Ignorer lignes de section / métadonnées
+        const firstCell = cells[0] || cells[1] || '';
+        if (SKIP_PATTERNS.some(p => p.test(firstCell) || p.test(rowText.slice(0, 80)))) return;
+
+        // ── Extraire tous les emails de la ligne (peu importe la colonne) ──
+        const emails = [...new Set(rowText.match(EMAIL_RE) || [])].filter(e => e.length > 5);
+        if (!emails.length) return;
+
+        // ── Extraire nom / prénom / entreprise ──
+        let nom = '', prenom = '', entreprise = '';
+
+        // Cellules sans email ni chiffres
+        const nonEmailCells = cells.filter(c => c && !EMAIL_RE.test(c) && !/^\d{5,}$/.test(c) && c.length > 1);
+        // reset regex lastIndex
+        EMAIL_RE.lastIndex = 0;
+
+        if (nomColIdx !== -1 && cells[nomColIdx]) {
+          const val = cells[nomColIdx];
+          if (isCompanyName(val)) {
+            entreprise = val;
+          } else {
+            const parts = val.split(/\s+/);
+            if (parts.length >= 2) { prenom = parts[0]; nom = parts.slice(1).join(' '); }
+            else { entreprise = val; }
+          }
+        }
+
+        if (contactColIdx !== -1 && cells[contactColIdx]) {
+          const val = cells[contactColIdx];
+          // Ignorer titres courts (ADG, RL, DG…)
+          if (!/^(ADG|RL|DG|CEO|PDG|DAF|DGA|MD|DIR|Dr|Hon|Prof)/i.test(val) && val.includes(' ') && !prenom) {
+            const parts = val.split(/\s+/);
+            prenom = parts[0]; nom = parts.slice(1).join(' ');
+          }
+        }
+
+        if (entrepriseColIdx !== -1 && cells[entrepriseColIdx] && !entreprise) {
+          entreprise = cells[entrepriseColIdx];
+        }
+
+        // Fallback : extraire depuis les premières cellules non-email
+        if (!nom && !entreprise && nonEmailCells.length > 0) {
+          const val = nonEmailCells[0];
+          if (isCompanyName(val)) {
+            entreprise = val;
+          } else {
+            const parts = val.split(/\s+/);
+            if (parts.length >= 2) { prenom = parts[0]; nom = parts.slice(1).join(' '); }
+            else { entreprise = val; }
+          }
+          if (!entreprise && nonEmailCells.length > 1) {
+            entreprise = nonEmailCells[1];
+          }
+        }
+
+        // ── Créer une entrée par email ──
+        emails.forEach(email => {
+          excelRows.push({
+            email:      email.toLowerCase().trim(),
+            nom:        nom.trim(),
+            prenom:     prenom.trim(),
+            entreprise: entreprise.trim(),
+            corps: '', sujet: ''
+          });
+        });
+      });
+
+      if (!excelRows.length) { alert('Aucun email valide trouvé dans le fichier.'); return; }
 
       sentRows.clear();
       currentRow = 0;
       renderRowList();
       loadRow(0);
+
+      // Mettre à jour la zone de dépôt
+      document.getElementById('excelDrop').querySelector('p').innerHTML =
+        `✓ <strong>${file.name}</strong> — <strong>${excelRows.length}</strong> destinataires extraits`;
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  // Heuristique : texte en majuscules ou contient des termes d'entreprise → entreprise
+  function isCompanyName(val) {
+    if (!val) return false;
+    const upper = val.toUpperCase();
+    if (val.length > 3 && val === upper) return true; // Tout en majuscules
+    if (/\b(SA|SARL|SAS|SPRL|Ltd|Inc|Corp|Group|Bank|Banque|Ministère|Ministry|Agency|Authority|Hotel|Club|Hospital)\b/i.test(val)) return true;
+    return false;
   }
 
   function findCol(headers, keywords) {
